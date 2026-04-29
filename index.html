@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>人有三急</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 20px; background: #f4f4f4; }
+        .card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .status-box { margin-top: 10px; font-size: 0.9em; color: #555; }
+        #heading-display { font-weight: bold; color: #007bff; }
+        .calibration-guide {
+            display: none;
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🏪 人有三急 </h2>
+    
+    <button id="enable-btn" style="padding: 10px 20px; cursor: pointer;">啟用位置與方向</button>
+    
+    <div class="status-box">
+        目前面向：<span id="heading-display">尚未取得</span> °<br>
+        精準度：<span id="accuracy-display">-</span>
+    </div>
+
+    <div id="calibration-alert" class="calibration-guide">
+        ⚠️ 偵測到方向感應不穩定？請拿起手機在空中畫 <b>「8」字型</b> 以校準羅盤。
+    </div>
+</div>
+
+<script>
+    let currentHeading = 0;
+    const headingDisplay = document.getElementById('heading-display');
+    const calibrationAlert = document.getElementById('calibration-alert');
+
+    // 取得權限與啟動監聽
+    document.getElementById('enable-btn').addEventListener('click', async () => {
+        // iOS 需要權限要求，Android 通常不需要但需處理絕對座標
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            const permission = await DeviceOrientationEvent.requestPermission();
+            if (permission === 'granted') {
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        } else {
+            // Android 優先使用 deviceorientationabsolute
+            if ('ondeviceorientationabsolute' in window) {
+                window.addEventListener('deviceorientationabsolute', handleOrientation);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        }
+        alert("方向監聽已啟動");
+        calibrationAlert.style.display = 'block';
+    });
+
+    // 平滑化處理 (低通濾波)
+    let lastHeading = null;
+    const alpha = 0.2; // 數值越小越平滑，但反應會變慢（建議 0.1 ~ 0.3 之間）
+
+    function handleOrientation(event) {
+        let heading = 0;
+
+        // 判斷不同瀏覽器的方位數據來源
+        if (event.webkitCompassHeading) {
+            // iOS 設備
+            heading = event.webkitCompassHeading;
+        } else if (event.absolute && event.alpha !== null) {
+            // Android 設備 (需補償其座標系差異)
+            heading = 360 - event.alpha; 
+        } else {
+            return; // 無法取得準確方位
+        }
+
+        // 處理 0/360 度跨越時的旋轉問題
+        if (lastHeading !== null) {
+            if (heading - lastHeading > 180) {
+                lastHeading += 360;
+            } else if (lastHeading - heading > 180) {
+                lastHeading -= 360;
+            }
+            // 套用濾波公式：新的值 = 舊值 * (1-α) + 新觀測值 * α
+            heading = lastHeading * (1 - alpha) + heading * alpha;
+        }
+
+        lastHeading = heading;
+        const normalizedHeading = (heading % 360 + 360) % 360;
+        
+        // 更新 UI
+        headingDisplay.innerText = Math.round(normalizedHeading);
+        
+        // 此處可連動你的 AR 或地圖視角圖標旋轉
+        // marker.setRotation(normalizedHeading);
+    }
+</script>
+
+</body>
+</html>
